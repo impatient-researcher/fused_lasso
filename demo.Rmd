@@ -1,0 +1,571 @@
+---
+title: "Adding fused lasso as a user-defined function in caret"
+author: YAN Ting Hin
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    number_sections: true
+---
+
+# TL;DR
+
+`caret` allows you to write your own programme but it is hard to start from scratch. This demo shows you how you can retreive the code of an existing model and take bits and pieces from it to intriduce a new function to `Caret`.
+
+# Demo
+
+In this demo, I am going to add fused lasso to `caret`. There are tons of packages that do fused lasso but I only managed to wrap my head around 2 of them: namely: `genlasso` and `penalized`.
+
+## The boring bits
+
+### Libraries 
+
+```{r preamble, message=FALSE, warning=FALSE, paged.print=TRUE}
+library(midasr)
+library(caret)
+library(tidyr)
+library(dplyr)
+library(parallel)
+library(doParallel)
+library(purrr)
+
+# 2 packages in R that can do fused lasso
+library(genlasso)
+library(penalized)
+```
+
+### What is fused lasso?
+
+Tibshirani  (2005): The fussed Lasso minimises this criterion:
+
+$$\frac{1}{2}\sum_{t=1}^T(y_t - x_t'\beta)^2 + \lambda\sum_{i = 1}^{N-1}|\beta_i - \beta_{i+1}| + \gamma\lambda\sum_{i=1}^N|\beta_i|$$
+
+So there are 2 tuning parameters namely $\lambda$ and $\gamma$.
+
+## Existing models
+
+Out of the box `caret` includes quite a few machine learning programmes such as `rf`, `ranger`, `gbm` and `glmnet`. There are 2 ways to get the codes of these included models:
+
+1. Go to the github page of `caret`, look under the folder called "models": https://github.com/topepo/caret
+2. Make use of the `getModelInfo` function that comes with `caret`: See below
+
+I am working on fused lasso, of course the most relevant model for me is `glmnet`.
+
+```{r retreive existing, message=FALSE, warning=FALSE, paged.print=TRUE}
+glmnetModelInfo <- getModelInfo(model = "glmnet", regex = FALSE)[[1]]; names(glmnetModelInfo)
+```
+
+So a model in `caret` is nothing just a **named list** albeit quite a long one. While there are quite a few things going on, only these are compulsory:
+
+1. library
+2. type
+3. parameters
+4. grid
+5. fit
+6. predict
+7. prob (note: for classification problems only)
+8. sort
+
+And in this specific demo, I will also define one extra optional element
+
+9. loop
+
+Other parts are merely bells and whistles and well...ain't nobody got time for that.
+
+## Changing bits and pieces
+
+### Library, type, parameters
+
+These are strings that are doing nothing but giving users information about the model.
+
+```{r library type parameters, message=FALSE, warning=FALSE, paged.print=TRUE}
+glmnetModelInfo[names(glmnetModelInfo) %in% c("library", "type", "parameters")]
+```
+
+Let's replicate that structure for fused lasso
+
+```{r replicate library type parameters, message=FALSE, warning=FALSE, paged.print=TRUE}
+
+fused_lasso <- list(
+  
+  library = "genlasso",
+  type = "Regression",
+  parameters = data.frame(parameter = c('lambda', 'gamma'),
+                          class = c("numeric", "numeric"),
+                          label = c('Fusion Penalty', 'Sparsity Loading'))
+  )
+```
+
+### grid
+
+If you are familiar with `caret`, you will know that you can tune a model by either:
+
+1. Tell `caret` to tune how many models via the parameter `tuneLength` (which is a grid search under the hood)
+2. Ask `caret` to do a random search (See https://topepo.github.io/caret/random-hyperparameter-search.html)
+3. You supply a grid and ask `caret` to search through all of them (keywords: `expand.grid`)
+
+The `grid` element deals with the first 2 methods.
+
+```{r grid, message=FALSE, warning=FALSE, paged.print=TRUE}
+glmnetModelInfo[names(glmnetModelInfo) %in% c("grid")]
+```
+
+It looks horrible but all you need to care is that the object `out` takes different forms depending on whether the user specifies `tuneLength` or a random searchl; and if `tuneLength` is chosen, then you set up a grid via `expand.grid` like so:
+
+```{r highlight grid, message=FALSE, warning=FALSE, eval = FALSE, paged.print=TRUE}
+out <- expand.grid(alpha = seq(0.1, 1, length = len), lambda = lambda)
+```
+
+or else you do a random search via `runif` like so:
+
+```{r highlight random, message=FALSE, warning=FALSE, eval = FALSE, paged.print=TRUE}
+out <- data.frame(alpha = runif(len, min = 0, 1), lambda = 2^runif(len, min = -10, 3))
+```
+
+Notice that the parameter `len` is specified by the user when he/she specifies `tuneLength` in `trainControl`.
+
+With this in mind, in the fused lasso context, I can cut down the complexity remarkably and just do this:
+
+```{r replicate grid, message=FALSE, warning=FALSE, paged.print=TRUE}
+fused_lasso$grid <- function(x, y, len = NULL, search = "grid") {
+  
+  # grid search
+  if(search == "grid") {
+    
+    grid <- expand.grid(lambda = exp(-seq(1, 10, length = len)), gamma = seq(1,5,1))
+    
+    } else {
+      
+      grid <- expand.grid(lambda = 2^runif(len, min = -10, max = 3), gamma = seq(1,5,1))}
+  
+  return(grid)
+}
+```
+
+*"Are these parameters sensible?"* one might ask. Probably not but then for me I am going to supply my own tuning parameter grid and not rely on `tuneLength` or random search anyway, so I might as well just leave them as they are and focus on more important stuff.
+
+### fit (important!)
+
+This is the main workhorse of the `caret` model where you actually specify what function to use! 
+
+Let's first start by looking at how `glmnet` does it.
+
+```{r fit, message=FALSE, warning=FALSE, paged.print=TRUE}
+glmnetModelInfo[names(glmnetModelInfo) %in% c("fit")]
+```
+
+So `fit` is nothing but a function that takes a specific set of arguments. For a thorough description of what each argument is and does, see: https://topepo.github.io/caret/using-your-own-model-in-train.html
+
+As for all other elements in `caret`, if you want to understand what the code is doing, it is easier to **start at the end** and look for the object called `out`. In fact, the main functionality of `glmnet` comes from these few lines of code:
+
+```{r highlight fit, message=FALSE, warning=FALSE, eval = FALSE, paged.print=TRUE}
+modelArgs <- c(list(x = x, y = y, alpha = param$alpha), theDots)
+out <- do.call(glmnet::glmnet, modelArgs)
+```
+
+where the `param` argument contains the current tuning parameter value.
+
+So it should be quite easy to replicate that for fused lasso: 
+
+```{r replicate fit, message=FALSE, warning=FALSE, paged.print=TRUE}
+fused_lasso$fit <- function(x, y, wts, param, lev, last, classProbs, ...) {
+                      
+                      # all other options
+                      theDots <- list(...)
+                      
+                      # make sure your x variable is a matrix
+                      if(!(class(x)[1] %in% c("matrix", "sparseMatrix")))
+                        x <- Matrix::as.matrix(x)
+                      
+                      modelArgs <- c(list(X = x, y = y, 
+                                          gamma = param$gamma), theDots)
+                      
+                      # this will run the model for a series of lambda values
+                      out <- do.call(genlasso::fusedlasso1d, modelArgs)
+                      
+                      # finally add lambda to the list of objects 
+                      if(!is.na(param$lambda[1])) out$lambdaOpt <- param$lambda[1]
+                      
+                      return(out)
+    
+}
+```
+
+As you can see, it is almost identical to the setup of `glmnet` but with 4 tweaks:
+
+1. I don't care about classifcation problems so I just ignore the argument `lev`
+2. I don't allow for instance weights so no `wts`
+3. I just substituted out `alpha` for `gamma`
+4. I just substituted out `glmnet::glmnet` for `genlasso::fusedlasso1d`
+
+and that's about it.
+
+For those curious minds out there, you may be wondering why on earth there is a mysterious line of code that says this:
+
+```{r highlight lambdaOpt, message=FALSE, warning=FALSE, eval = FALSE, paged.print=TRUE}
+if(!is.na(param$lambda[1])) out$lambdaOpt <- param$lambda[1]
+```
+
+My honest answer is that that's becasue it is there in `glmnet` so I retain it in my `fussed_lasso` fucntion. 
+
+If you are not happy with that answer, I will also offer my intuition: when you run `glmnet` or `fusedlasso1d`, the function will automatically calculate the $\hat\beta$'s for various $\lambda$ values so each `fit` object is not associated with a single $\lambda$ value but a series of $\lambda$ value**s**. But for the subsequent `predict` element `caret` requires us to define, it calls back from the `fit` element for a single $\lambda$ value so we have to include it in the `fit` element.
+
+Not the clearest explanation I know but hopefully it will become clearer after you go through the next section.
+
+### predict and loop (difficult!)
+
+```{r predict, message=FALSE, warning=FALSE, paged.print=TRUE}
+glmnetModelInfo[names(glmnetModelInfo) %in% c("predict")]
+```
+
+If you just focus on line 6, you can see that all this `predict` element is doing is simply this:
+
+```{r highlight predict, message=FALSE, warning=FALSE, eval = FALSE, paged.print=TRUE}
+out <- predict(modelFit, newdata, s = modelFit$lambdaOpt)
+```
+
+Where the `lambdaOpt` value we defined earlier in the `fit` element is being used here.
+
+Then there is something called `submodels` on line 14. This mysterious term comes from another `caret` element namely `loop`:
+
+```{r loop, message=FALSE, warning=FALSE, paged.print=TRUE}
+glmnetModelInfo[names(glmnetModelInfo) %in% c("loop")]
+```
+
+`submodels` are closely linked to how the 2 functions `glmnet`and `fusedlasso1d` are written up. If you recall what I said about them in the previous section, the `fit` object resulted from these two functions is associated with a series of $\lambda$ values so when you are tuning the model for different values of $\lambda$, you do not need to re-fit the model again.
+
+Consider the following example, suppose that I am tuning my fused lasso model using the following grid:
+
+```{r example grid, message=FALSE, warning=FALSE, paged.print=TRUE}
+example_grid <- expand.grid(gamma = 1, lambda = seq(1,5,1)); example_grid
+```
+
+I can of course fit 5 models where each model corresponds to a row of the grid (which is very time consuming btw) or just fit `fusedlasso1d` once setting $\gamma$ and $\lambda$ both to 1, then derive predictions associated with the remaining 4 $\lambda$ values (row 2 to 5) - these 4 models are what `caret` calls `submodels`.
+
+To make things even more confusing, in the context of `glmnet`, `caret` calls `alpha` a "fixed" parameter while calling `lambda` a "sequential" parameter. And in the case of `fusedlasso1d`, `gamma` is "fixed" and `lambda` is "sequential".
+
+If you need more examples to get your head round this, see section 13.5 of http://topepo.github.io/caret/using-your-own-model-in-train.html.
+
+```{r replicate loop, message=FALSE, warning=FALSE, paged.print=TRUE}
+# defining submodels
+fused_lasso$loop <- function(grid) {
+  
+  gamma <- unique(grid$gamma)
+  loop <- data.frame(gamma = gamma)
+  loop$lambda <- NA
+  submodels <- vector(mode = "list", length = length(gamma))
+  
+  for(i in seq(along = gamma)) {
+    
+    # obtain all lambda values for a given gamma
+    np <- grid[grid$gamma == gamma[i], "lambda"]
+                        
+    # assign the max lambda (for a given gamma) as THE lambda
+    # actually it doesn't have to be the biggest lambda
+    # all you need to make sure is that you have a way to isolate a particular lambda
+    loop$lambda[loop$gamma == gamma[i]] <- np[which.max(np)]
+                        
+    # all other lambdas - treat them as submodels
+    submodels[[i]] <- data.frame(lambda = np[-which.max(np)])
+    
+  }
+  
+  # why make a list? because that's how caret likes it!
+  list(loop = loop, submodels = submodels)
+                  
+}
+```
+
+```{r replicate predict, message=FALSE, warning=FALSE, paged.print=TRUE}
+fused_lasso$predict <- function(modelFit, newdata, submodels = NULL) {
+  
+  # make sure your newdata is matrix form
+  if(!is.matrix(newdata)) newdata <- Matrix::as.matrix(newdata)
+  
+  # see https://rdrr.io/github/glmgen/genlasso/man/predict.genlasso.html
+  out <- predict(object = modelFit, Xnew = newdata, lambda = modelFit$lambdaOpt)$fit
+  
+  # or you can do it the old school way                  
+  #out <- newdata %*% coef(modelFit, lambda = modelFit$lambdaOpt)$beta
+
+  # extract the first column 
+  if(is.matrix(out)) out <- out[,1]
+  
+  # derive predictions for all other lambda values                    
+  if(!is.null(submodels)) {
+    
+    tmp <- as.list(as.data.frame(predict(object = modelFit,
+                                         Xnew = newdata, lambda = submodels$lambda)$fit))
+    
+    out <- c(list(out), tmp)
+                        
+  }
+  
+  return(out)
+                      
+}
+```
+
+### prob and sort
+
+```{r prob and sort, message=FALSE, warning=FALSE, paged.print=TRUE}
+glmnetModelInfo[names(glmnetModelInfo) %in% c("prob", "sort")]
+```
+
+Let's replicate that for fused lasso:
+```{r replicate prob and sort, message=FALSE, warning=FALSE, paged.print=TRUE}
+# because I am lazy
+fused_lasso$prob <- NULL
+
+fused_lasso$sort <- function(x) x[order(-x$lambda, x$gamma),]
+```
+
+## Putting it all together
+```{r putting it all together, message=FALSE, warning=FALSE, paged.print=TRUE}
+fused_lasso <- list(library = "genlasso",
+                    
+                    type = "Regression",
+                    
+                    parameters = data.frame(parameter = c('lambda', 'gamma'),
+                                          class = c("numeric", "numeric"),
+                                          label = c('Fusion Penalty', 'Sparsity Loading')),
+                    
+                    grid = function(x, y, len = NULL, search = "grid") {
+                      
+                      if(search == "grid") {
+                        
+                        grid <- expand.grid(lambda = exp(-seq(1, 10, length = len)),
+                                            gamma = seq(1,5,1))
+                        
+                        } else {grid <- expand.grid(lambda = 2^runif(len, min = -10, max = 3),
+                                          gamma = c(1,2))}
+                      
+                      return(grid)},
+
+                    loop = function(grid) {
+
+                      gamma <- unique(grid$gamma)
+                      loop <- data.frame(gamma = gamma)
+                      loop$lambda <- NA
+                      submodels <- vector(mode = "list", length = length(gamma))
+
+                      for(i in seq(along = gamma)) {
+                        
+                        np <- grid[grid$gamma == gamma[i], "lambda"]
+                        
+                        loop$lambda[loop$gamma == gamma[i]] <- np[which.max(np)]
+                        
+                        submodels[[i]] <- data.frame(lambda = np[-which.max(np)])
+     
+                      }
+                      
+                      list(loop = loop, submodels = submodels)
+                  
+                    },
+                    
+                    fit = function(x, y, wts, param, lev, last, classProbs, ...) {
+                      
+                      theDots <- list(...)
+                      
+                      if(!(class(x)[1] %in% c("matrix", "sparseMatrix")))
+                        x <- Matrix::as.matrix(x)
+                      
+                      modelArgs <- c(list(X = x, y = y, 
+                                          gamma = param$gamma), theDots)
+                      
+                      out <- do.call(genlasso::fusedlasso1d, modelArgs)
+                      
+                      if(!is.na(param$lambda[1])) out$lambdaOpt <- param$lambda[1]
+                      
+
+                      return(out)
+    
+                    },
+                    
+                    predict = function(modelFit, newdata, submodels = NULL) {
+                      
+                      if(!is.matrix(newdata)) newdata <- Matrix::as.matrix(newdata)
+                      
+                    
+                      out <- predict(object = modelFit, Xnew = newdata, lambda = modelFit$lambdaOpt)$fit
+                      
+                      if(is.matrix(out)) out <- out[,1]
+                      
+                      if(!is.null(submodels)) {
+                        
+
+                        tmp <- as.list(as.data.frame(predict(object = modelFit,
+                                                             Xnew = newdata, lambda = submodels$lambda)$fit))
+                        out <- c(list(out), tmp)
+                        
+                      }
+                      
+                      return(out)
+                      
+                    },
+                    
+                    prob = NULL,
+                    
+                    varImp = NULL,
+                    
+                    sort = function(x) x[order(-x$lambda, x$gamma),]
+)
+```
+
+# Test
+
+Let's test if the `fused_lasso` function is doing what you expect it to do. To do that, I will apply fused lasso via the newly constructed `fused_lasso` function within the `caret` framework and compare that to the results I get when calculating by hand.
+
+## Data
+
+Let's generate some data.
+
+```{r data, message=FALSE, warning=FALSE, paged.print=TRUE}
+set.seed(2019)
+
+# 10 variables, 1000 observations
+n = 1000
+p = 10
+
+X = matrix(rnorm(n*p), ncol = p)
+
+# only the first 2 variables matters, others are purely noise
+y = X[,1] + X[,2] + rnorm(n)
+
+df <- cbind.data.frame(y, X) 
+colnames(df) <- c("y", paste0("X_", seq(1,10,1)))
+```
+
+## K-folds
+
+Create 5 custom folds which are hold-out samples when evaluating model performance.
+
+```{r k folds, message=FALSE, warning=FALSE, paged.print=TRUE}
+folds <- createFolds(y, 5, returnTrain = TRUE); length(folds)
+```
+
+## `fussed_lasso` under `caret`
+
+```{r fused lasso caret, message=FALSE, warning=FALSE, paged.print=TRUE}
+start_time <- Sys.time()
+
+fitControl <- trainControl(method = "cv",
+                           number = 5,
+                           index = folds, # specified hold-out samples for future comparison with by-hand results
+                           savePredictions = TRUE)
+
+check_caret <- train(y ~ ., df,
+                     method = fused_lasso,
+                     tuneLength = 5, # notice here the default grid search is a bit silly - for testing only! dont use it in production!
+                     trControl = fitControl)
+
+end_time <- Sys.time()
+
+caret_speed <- end_time - start_time
+```
+
+## Fused lasso by hand
+
+```{r fused lasso by hand, message=FALSE, warning=FALSE, paged.print=TRUE}
+start_time <- Sys.time()
+
+# re-arrange training data into a list according to "fold" indices
+train_test_data_list <- lapply(c(1:length(folds)), function(index){
+
+  # define training index
+  train_index = folds[[index]]
+  
+  # training data as dataframe
+  training = df[train_index, ]
+
+  y_train = training$y %>% as.numeric(.)
+  X_train = training[,-1] %>% as.matrix(.)
+
+  training2 = list(outcome = y_train,
+                  covariate = X_train)
+  
+  # test data as dataframe
+  test = df[-train_index, ]
+
+  y = test$y %>% as.numeric(.)
+  X = test[,-1] %>% as.matrix(.)
+
+  test2 = list(outcome = y,
+               covariate = X)
+  
+  result = list(training = training2, test = test2)
+  return(result)
+})
+
+names(train_test_data_list) <- paste("fold", c(1:length(folds)), sep = "_")
+
+# retreive the exact parameter grid used
+gamma_grid <- data.frame(gamma = check_caret$results$gamma %>% unique(.))
+lambda_grid <- data.frame(lambda = check_caret$results$lambda %>% unique(.))
+
+# calculate the mean RMSE for each combo of parameters across folds
+by_hand_fit <- lapply(1:nrow(gamma_grid), function(par_index){
+
+  gamma = gamma_grid$gamma[par_index]
+
+  # fixed gamma, loop folds
+  per_gamma = lapply(train_test_data_list, function(fold){
+
+    fused = fusedlasso1d(y = fold[["training"]][["outcome"]], X = fold[["training"]][["covariate"]],
+                         gamma = gamma, verbose = F)
+    
+    # make predictions for a series of lambda on the test data
+    validations = lapply(1:nrow(lambda_grid), function(lambda_index) {
+      
+      lambda = lambda_grid$lambda[lambda_index]
+        
+      # make sure it says "test"" here!  
+      data.frame(actual = fold[["test"]][["outcome"]],
+                 prediction = predict(object = fused,
+                                      Xnew = fold[["test"]][["covariate"]], 
+                                      lambda = lambda)$fit %>% as.vector(.),
+                 lambda = lambda,
+                 gamma = gamma) %>%
+        mutate(squared_error = (actual - prediction) ^ 2) %>%
+        group_by(lambda, gamma) %>%
+        summarise(rmse = sqrt(mean(squared_error))) %>%
+        ungroup()
+    
+    }) %>% bind_rows()
+    
+  }) %>% bind_rows()
+  
+}) %>% bind_rows() %>%
+ group_by(gamma, lambda) %>%
+        summarise(RMSE = mean(rmse)) %>%  
+  ungroup() %>%
+  arrange(lambda)
+
+end_time <- Sys.time()
+
+by_hand_speed <- end_time - start_time
+```
+
+## Compare results
+
+### RMSE
+
+```{r fused lasso rmse comparison, message=FALSE, warning=FALSE, paged.print=TRUE}
+caret_rmse <- check_caret$results %>%
+  as.data.frame(.) %>%
+  dplyr::select(gamma, lambda, RMSE)
+
+difference <- left_join(caret_rmse, by_hand_fit, by = c("gamma", "lambda")) %>%
+  mutate(abs_diff = abs(RMSE.x - RMSE.y))
+
+difference$abs_diff
+```
+
+### Time
+
+```{r fused lasso spped comparison, message=FALSE, warning=FALSE, paged.print=TRUE}
+paste("Caret:", caret_speed)
+
+paste("By hand:", by_hand_speed)
+```
