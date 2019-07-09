@@ -1478,17 +1478,22 @@ div.tocify {
 </div>
 
 
+<div id="readme" class="section level1">
+<h1><span class="header-section-number">1</span> README</h1>
+<p>The official <code>caret</code> documentation is one of the most comphrehensive I have seen so you should always read that first! See: <a href="https://topepo.github.io/caret/" class="uri">https://topepo.github.io/caret/</a></p>
+</div>
 <div id="tldr" class="section level1">
-<h1><span class="header-section-number">1</span> TL;DR</h1>
-<p><code>caret</code> allows you to write your own programme but it is hard to start from scratch. This demo shows you how you can retreive the code of an existing model and take bits and pieces from it to intriduce a new function to <code>Caret</code>.</p>
+<h1><span class="header-section-number">2</span> TL;DR</h1>
+<p><code>caret</code> allows you to write your own programme but it is hard to start from scratch. This demo shows you how you can retreive the code of an existing model and take bits and pieces from it to intriduce a new function to <code>caret</code>.</p>
 </div>
 <div id="demo" class="section level1">
-<h1><span class="header-section-number">2</span> Demo</h1>
+<h1><span class="header-section-number">3</span> Demo</h1>
 <p>In this demo, I am going to add fused lasso to <code>caret</code>. There are tons of packages that do fused lasso but I only managed to wrap my head around 2 of them: namely: <code>genlasso</code> and <code>penalized</code>.</p>
+<p>For now I will focus on <code>genlasso</code>.</p>
 <div id="the-boring-bits" class="section level2">
-<h2><span class="header-section-number">2.1</span> The boring bits</h2>
+<h2><span class="header-section-number">3.1</span> The boring bits</h2>
 <div id="libraries" class="section level3">
-<h3><span class="header-section-number">2.1.1</span> Libraries</h3>
+<h3><span class="header-section-number">3.1.1</span> Libraries</h3>
 <pre class="r"><code>library(midasr)
 library(caret)
 library(tidyr)
@@ -1497,19 +1502,19 @@ library(parallel)
 library(doParallel)
 library(purrr)
 
-# 2 packages in R that can do fused lasso
+# 2 packages in R that can do fused lasso which I understand
 library(genlasso)
 library(penalized)</code></pre>
 </div>
 <div id="what-is-fused-lasso" class="section level3">
-<h3><span class="header-section-number">2.1.2</span> What is fused lasso?</h3>
-<p>Tibshirani (2005): The fussed Lasso minimises this criterion:</p>
+<h3><span class="header-section-number">3.1.2</span> What is fused lasso?</h3>
+<p>Tibshirani (2005): The fussed lasso minimises this criterion:</p>
 <p><span class="math display">\[\frac{1}{2}\sum_{t=1}^T(y_t - x_t&#39;\beta)^2 + \lambda\sum_{i = 1}^{N-1}|\beta_i - \beta_{i+1}| + \gamma\lambda\sum_{i=1}^N|\beta_i|\]</span></p>
 <p>So there are 2 tuning parameters namely <span class="math inline">\(\lambda\)</span> and <span class="math inline">\(\gamma\)</span>.</p>
 </div>
 </div>
 <div id="existing-models" class="section level2">
-<h2><span class="header-section-number">2.2</span> Existing models</h2>
+<h2><span class="header-section-number">3.2</span> Existing models</h2>
 <p>Out of the box <code>caret</code> includes quite a few machine learning programmes such as <code>rf</code>, <code>ranger</code>, <code>gbm</code> and <code>glmnet</code>. There are 2 ways to get the codes of these included models:</p>
 <ol style="list-style-type: decimal">
 <li>Go to the github page of <code>caret</code>, look under the folder called “models”: <a href="https://github.com/topepo/caret" class="uri">https://github.com/topepo/caret</a></li>
@@ -1531,16 +1536,16 @@ library(penalized)</code></pre>
 <li>prob (note: for classification problems only)</li>
 <li>sort</li>
 </ol>
-<p>And in this specific demo, I will also define one extra optional element</p>
+<p>And in this specific demo, I will also define one extra optional element:</p>
 <ol start="9" style="list-style-type: decimal">
 <li>loop</li>
 </ol>
 <p>Other parts are merely bells and whistles and well…ain’t nobody got time for that.</p>
 </div>
 <div id="changing-bits-and-pieces" class="section level2">
-<h2><span class="header-section-number">2.3</span> Changing bits and pieces</h2>
+<h2><span class="header-section-number">3.3</span> Changing bits and pieces</h2>
 <div id="library-type-parameters" class="section level3">
-<h3><span class="header-section-number">2.3.1</span> Library, type, parameters</h3>
+<h3><span class="header-section-number">3.3.1</span> library, type, parameters</h3>
 <p>These are strings that are doing nothing but giving users information about the model.</p>
 <pre class="r"><code>glmnetModelInfo[names(glmnetModelInfo) %in% c(&quot;library&quot;, &quot;type&quot;, &quot;parameters&quot;)]</code></pre>
 <pre><code>## $library
@@ -1564,7 +1569,7 @@ library(penalized)</code></pre>
   )</code></pre>
 </div>
 <div id="grid" class="section level3">
-<h3><span class="header-section-number">2.3.2</span> grid</h3>
+<h3><span class="header-section-number">3.3.2</span> grid</h3>
 <p>If you are familiar with <code>caret</code>, you will know that you can tune a model by either:</p>
 <ol style="list-style-type: decimal">
 <li>Tell <code>caret</code> to tune how many models via the parameter <code>tuneLength</code> (which is a grid search under the hood)</li>
@@ -1620,7 +1625,7 @@ library(penalized)</code></pre>
 <p><em>“Are these parameters sensible?”</em> one might ask. Probably not but then for me I am going to supply my own tuning parameter grid and not rely on <code>tuneLength</code> or random search anyway, so I might as well just leave them as they are and focus on more important stuff.</p>
 </div>
 <div id="fit-important" class="section level3">
-<h3><span class="header-section-number">2.3.3</span> fit (important!)</h3>
+<h3><span class="header-section-number">3.3.3</span> fit (important!)</h3>
 <p>This is the main workhorse of the <code>caret</code> model where you actually specify what function to use!</p>
 <p>Let’s first start by looking at how <code>glmnet</code> does it.</p>
 <pre class="r"><code>glmnetModelInfo[names(glmnetModelInfo) %in% c(&quot;fit&quot;)]</code></pre>
@@ -1690,7 +1695,7 @@ out &lt;- do.call(glmnet::glmnet, modelArgs)</code></pre>
 <p>Not the clearest explanation I know but hopefully it will become clearer after you go through the next section.</p>
 </div>
 <div id="predict-and-loop-difficult" class="section level3">
-<h3><span class="header-section-number">2.3.4</span> predict and loop (difficult!)</h3>
+<h3><span class="header-section-number">3.3.4</span> predict and loop (difficult!)</h3>
 <pre class="r"><code>glmnetModelInfo[names(glmnetModelInfo) %in% c(&quot;predict&quot;)]</code></pre>
 <pre><code>## $predict
 ## function (modelFit, newdata, submodels = NULL) 
@@ -1753,7 +1758,7 @@ out &lt;- do.call(glmnet::glmnet, modelArgs)</code></pre>
 ## 5     1      5</code></pre>
 <p>I can of course fit 5 models where each model corresponds to a row of the grid (which is very time consuming btw) or just fit <code>fusedlasso1d</code> once setting <span class="math inline">\(\gamma\)</span> and <span class="math inline">\(\lambda\)</span> both to 1, then derive predictions associated with the remaining 4 <span class="math inline">\(\lambda\)</span> values (row 2 to 5) - these 4 models are what <code>caret</code> calls <code>submodels</code>.</p>
 <p>To make things even more confusing, in the context of <code>glmnet</code>, <code>caret</code> calls <code>alpha</code> a “fixed” parameter while calling <code>lambda</code> a “sequential” parameter. And in the case of <code>fusedlasso1d</code>, <code>gamma</code> is “fixed” and <code>lambda</code> is “sequential”.</p>
-<p>If you need more examples to get your head round this, see section 13.5 of <a href="http://topepo.github.io/caret/using-your-own-model-in-train.html" class="uri">http://topepo.github.io/caret/using-your-own-model-in-train.html</a>.</p>
+<p>If you need more examples to get your head round this, see <a href="https://topepo.github.io/caret/using-your-own-model-in-train.html#illustrative-example-2-something-more-complicated---logitboost" class="uri">https://topepo.github.io/caret/using-your-own-model-in-train.html#illustrative-example-2-something-more-complicated---logitboost</a>.</p>
 <pre class="r"><code># defining submodels
 fused_lasso$loop &lt;- function(grid) {
   
@@ -1810,7 +1815,7 @@ fused_lasso$loop &lt;- function(grid) {
 }</code></pre>
 </div>
 <div id="prob-and-sort" class="section level3">
-<h3><span class="header-section-number">2.3.5</span> prob and sort</h3>
+<h3><span class="header-section-number">3.3.5</span> prob and sort</h3>
 <pre class="r"><code>glmnetModelInfo[names(glmnetModelInfo) %in% c(&quot;prob&quot;, &quot;sort&quot;)]</code></pre>
 <pre><code>## $prob
 ## function (modelFit, newdata, submodels = NULL) 
@@ -1860,7 +1865,7 @@ fused_lasso$sort &lt;- function(x) x[order(-x$lambda, x$gamma),]</code></pre>
 </div>
 </div>
 <div id="putting-it-all-together" class="section level2">
-<h2><span class="header-section-number">2.4</span> Putting it all together</h2>
+<h2><span class="header-section-number">3.4</span> Putting it all together</h2>
 <pre class="r"><code>fused_lasso &lt;- list(library = &quot;genlasso&quot;,
                     
                     type = &quot;Regression&quot;,
@@ -1952,10 +1957,10 @@ fused_lasso$sort &lt;- function(x) x[order(-x$lambda, x$gamma),]</code></pre>
 </div>
 </div>
 <div id="test" class="section level1">
-<h1><span class="header-section-number">3</span> Test</h1>
+<h1><span class="header-section-number">4</span> Test</h1>
 <p>Let’s test if the <code>fused_lasso</code> function is doing what you expect it to do. To do that, I will apply fused lasso via the newly constructed <code>fused_lasso</code> function within the <code>caret</code> framework and compare that to the results I get when calculating by hand.</p>
 <div id="data" class="section level2">
-<h2><span class="header-section-number">3.1</span> Data</h2>
+<h2><span class="header-section-number">4.1</span> Data</h2>
 <p>Let’s generate some data.</p>
 <pre class="r"><code>set.seed(2019)
 
@@ -1972,13 +1977,13 @@ df &lt;- cbind.data.frame(y, X)
 colnames(df) &lt;- c(&quot;y&quot;, paste0(&quot;X_&quot;, seq(1,10,1)))</code></pre>
 </div>
 <div id="k-folds" class="section level2">
-<h2><span class="header-section-number">3.2</span> K-folds</h2>
+<h2><span class="header-section-number">4.2</span> K-folds</h2>
 <p>Create 5 custom folds which are hold-out samples when evaluating model performance.</p>
 <pre class="r"><code>folds &lt;- createFolds(y, 5, returnTrain = TRUE); length(folds)</code></pre>
 <pre><code>## [1] 5</code></pre>
 </div>
 <div id="fussed_lasso-under-caret" class="section level2">
-<h2><span class="header-section-number">3.3</span> <code>fussed_lasso</code> under <code>caret</code></h2>
+<h2><span class="header-section-number">4.3</span> <code>fussed_lasso</code> under <code>caret</code></h2>
 <pre class="r"><code>start_time &lt;- Sys.time()
 
 fitControl &lt;- trainControl(method = &quot;cv&quot;,
@@ -1996,7 +2001,7 @@ end_time &lt;- Sys.time()
 caret_speed &lt;- end_time - start_time</code></pre>
 </div>
 <div id="fused-lasso-by-hand" class="section level2">
-<h2><span class="header-section-number">3.4</span> Fused lasso by hand</h2>
+<h2><span class="header-section-number">4.4</span> Fused lasso by hand</h2>
 <pre class="r"><code>start_time &lt;- Sys.time()
 
 # re-arrange training data into a list according to &quot;fold&quot; indices
@@ -2076,9 +2081,10 @@ end_time &lt;- Sys.time()
 by_hand_speed &lt;- end_time - start_time</code></pre>
 </div>
 <div id="compare-results" class="section level2">
-<h2><span class="header-section-number">3.5</span> Compare results</h2>
+<h2><span class="header-section-number">4.5</span> Compare results</h2>
 <div id="rmse" class="section level3">
-<h3><span class="header-section-number">3.5.1</span> RMSE</h3>
+<h3><span class="header-section-number">4.5.1</span> RMSE</h3>
+<p>To make sure <code>caret</code> is behaving okay I compare the RMSE given in <code>caret</code> with what I get when I do the calculation by hand.</p>
 <pre class="r"><code>caret_rmse &lt;- check_caret$results %&gt;%
   as.data.frame(.) %&gt;%
   dplyr::select(gamma, lambda, RMSE)
@@ -2086,15 +2092,17 @@ by_hand_speed &lt;- end_time - start_time</code></pre>
 difference &lt;- left_join(caret_rmse, by_hand_fit, by = c(&quot;gamma&quot;, &quot;lambda&quot;)) %&gt;%
   mutate(abs_diff = abs(RMSE.x - RMSE.y))
 
+# 25 zero&#39;s because there are 5 gammas and 5 lambdas (hence 25 combinations)
 difference$abs_diff</code></pre>
 <pre><code>##  [1] 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0</code></pre>
 </div>
 <div id="time" class="section level3">
-<h3><span class="header-section-number">3.5.2</span> Time</h3>
-<pre class="r"><code>paste(&quot;Caret:&quot;, caret_speed)</code></pre>
-<pre><code>## [1] &quot;Caret: 2.93724513053894&quot;</code></pre>
-<pre class="r"><code>paste(&quot;By hand:&quot;, by_hand_speed)</code></pre>
-<pre><code>## [1] &quot;By hand: 2.73447799682617&quot;</code></pre>
+<h3><span class="header-section-number">4.5.2</span> Time</h3>
+<p>And it seems <code>caret</code> is a tiny bit faster than doing it by hand. I reckon the gain will be more significant in the context of timeslicing.</p>
+<pre class="r"><code>cat(&quot;Caret:&quot;, caret_speed, &quot;\n&quot;)</code></pre>
+<pre><code>## Caret: 4.357949</code></pre>
+<pre class="r"><code>cat(&quot;By hand:&quot;, by_hand_speed)</code></pre>
+<pre><code>## By hand: 3.276065</code></pre>
 </div>
 </div>
 </div>

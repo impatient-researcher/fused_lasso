@@ -11,17 +11,23 @@ output:
 knit: (function(input_file, encoding) {
   out_dir <- 'docs';
   rmarkdown::render(input_file,
-  encoding=encoding,
-  output_file=file.path(dirname(input_file), out_dir, 'index.html'))})    
+  encoding = encoding,
+  output_file = file.path(dirname(input_file), out_dir, 'index.html'))})    
 ---
+
+# README
+
+The official `caret` documentation is one of the most comphrehensive I have seen so you should always read that first! See: https://topepo.github.io/caret/
 
 # TL;DR
 
-`caret` allows you to write your own programme but it is hard to start from scratch. This demo shows you how you can retreive the code of an existing model and take bits and pieces from it to intriduce a new function to `Caret`.
+`caret` allows you to write your own programme but it is hard to start from scratch. This demo shows you how you can retreive the code of an existing model and take bits and pieces from it to intriduce a new function to `caret`.
 
 # Demo
 
 In this demo, I am going to add fused lasso to `caret`. There are tons of packages that do fused lasso but I only managed to wrap my head around 2 of them: namely: `genlasso` and `penalized`.
+
+For now I will focus on `genlasso`.
 
 ## The boring bits
 
@@ -36,14 +42,14 @@ library(parallel)
 library(doParallel)
 library(purrr)
 
-# 2 packages in R that can do fused lasso
+# 2 packages in R that can do fused lasso which I understand
 library(genlasso)
 library(penalized)
 ```
 
 ### What is fused lasso?
 
-Tibshirani  (2005): The fussed Lasso minimises this criterion:
+Tibshirani  (2005): The fussed lasso minimises this criterion:
 
 $$\frac{1}{2}\sum_{t=1}^T(y_t - x_t'\beta)^2 + \lambda\sum_{i = 1}^{N-1}|\beta_i - \beta_{i+1}| + \gamma\lambda\sum_{i=1}^N|\beta_i|$$
 
@@ -73,7 +79,7 @@ So a model in `caret` is nothing just a **named list** albeit quite a long one. 
 7. prob (note: for classification problems only)
 8. sort
 
-And in this specific demo, I will also define one extra optional element
+And in this specific demo, I will also define one extra optional element:
 
 9. loop
 
@@ -81,7 +87,7 @@ Other parts are merely bells and whistles and well...ain't nobody got time for t
 
 ## Changing bits and pieces
 
-### Library, type, parameters
+### library, type, parameters
 
 These are strings that are doing nothing but giving users information about the model.
 
@@ -92,7 +98,6 @@ glmnetModelInfo[names(glmnetModelInfo) %in% c("library", "type", "parameters")]
 Let's replicate that structure for fused lasso
 
 ```{r replicate library type parameters, message=FALSE, warning=FALSE, paged.print=TRUE}
-
 fused_lasso <- list(
   
   library = "genlasso",
@@ -251,7 +256,7 @@ I can of course fit 5 models where each model corresponds to a row of the grid (
 
 To make things even more confusing, in the context of `glmnet`, `caret` calls `alpha` a "fixed" parameter while calling `lambda` a "sequential" parameter. And in the case of `fusedlasso1d`, `gamma` is "fixed" and `lambda` is "sequential".
 
-If you need more examples to get your head round this, see section 13.5 of http://topepo.github.io/caret/using-your-own-model-in-train.html.
+If you need more examples to get your head round this, see https://topepo.github.io/caret/using-your-own-model-in-train.html#illustrative-example-2-something-more-complicated---logitboost.
 
 ```{r replicate loop, message=FALSE, warning=FALSE, paged.print=TRUE}
 # defining submodels
@@ -557,6 +562,8 @@ by_hand_speed <- end_time - start_time
 
 ### RMSE
 
+To make sure `caret` is behaving okay I compare the RMSE given in `caret` with what I get when I do the calculation by hand.
+
 ```{r fused lasso rmse comparison, message=FALSE, warning=FALSE, paged.print=TRUE}
 caret_rmse <- check_caret$results %>%
   as.data.frame(.) %>%
@@ -565,13 +572,16 @@ caret_rmse <- check_caret$results %>%
 difference <- left_join(caret_rmse, by_hand_fit, by = c("gamma", "lambda")) %>%
   mutate(abs_diff = abs(RMSE.x - RMSE.y))
 
+# 25 zero's because there are 5 gammas and 5 lambdas (hence 25 combinations)
 difference$abs_diff
 ```
 
 ### Time
 
-```{r fused lasso spped comparison, message=FALSE, warning=FALSE, paged.print=TRUE}
-paste("Caret:", caret_speed)
+And it seems `caret` is a tiny bit faster than doing it by hand. I reckon the gain will be more significant in the context of timeslicing.
 
-paste("By hand:", by_hand_speed)
+```{r fused lasso spped comparison, message=FALSE, warning=FALSE, paged.print=TRUE}
+cat("Caret:", caret_speed, "\n")
+
+cat("By hand:", by_hand_speed)
 ```
