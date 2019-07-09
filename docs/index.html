@@ -1484,7 +1484,7 @@ div.tocify {
 </div>
 <div id="tldr" class="section level1">
 <h1><span class="header-section-number">2</span> TL;DR</h1>
-<p><code>caret</code> allows you to write your own programme but it is hard to start from scratch. This demo shows you how you can retreive the code of an existing model and take bits and pieces from it to intriduce a new function to <code>caret</code>.</p>
+<p><code>caret</code> allows you to write your own programme but it is hard to start from scratch. This demo shows you how you can retreive the code of an existing model and take bits and pieces from it to introduce a new function to <code>caret</code>.</p>
 </div>
 <div id="demo" class="section level1">
 <h1><span class="header-section-number">3</span> Demo</h1>
@@ -1515,7 +1515,7 @@ library(penalized)</code></pre>
 </div>
 <div id="existing-models" class="section level2">
 <h2><span class="header-section-number">3.2</span> Existing models</h2>
-<p>Out of the box <code>caret</code> includes quite a few machine learning programmes such as <code>rf</code>, <code>ranger</code>, <code>gbm</code> and <code>glmnet</code>. There are 2 ways to get the codes of these included models:</p>
+<p>Out of the box <code>caret</code> includes quite a few machine learning models such as <code>rf</code>, <code>ranger</code>, <code>gbm</code> and <code>glmnet</code>. There are 2 ways to get the codes of these included models:</p>
 <ol style="list-style-type: decimal">
 <li>Go to the github page of <code>caret</code>, look under the folder called “models”: <a href="https://github.com/topepo/caret" class="uri">https://github.com/topepo/caret</a></li>
 <li>Make use of the <code>getModelInfo</code> function that comes with <code>caret</code>: See below</li>
@@ -1951,8 +1951,6 @@ fused_lasso$sort &lt;- function(x) x[order(-x$lambda, x$gamma),]</code></pre>
                     
                     prob = NULL,
                     
-                    varImp = NULL,
-                    
                     sort = function(x) x[order(-x$lambda, x$gamma),]
 )</code></pre>
 </div>
@@ -2097,14 +2095,15 @@ difference &lt;- left_join(caret_rmse, by_hand_fit, by = c(&quot;gamma&quot;, &q
 # 25 zero&#39;s because there are 5 gammas and 5 lambdas (hence 25 combinations)
 difference$abs_diff</code></pre>
 <pre><code>##  [1] 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0</code></pre>
+<p>So it seems that it’s working ok!</p>
 </div>
 <div id="time" class="section level3">
 <h3><span class="header-section-number">4.5.2</span> Time</h3>
 <p>And it seems <code>caret</code> is no faster than doing it by hand but much cleaner code I think.</p>
 <pre class="r"><code>cat(&quot;Caret:&quot;, caret_speed, &quot;\n&quot;)</code></pre>
-<pre><code>## Caret: 2.913884</code></pre>
+<pre><code>## Caret: 2.659596</code></pre>
 <pre class="r"><code>cat(&quot;By hand:&quot;, by_hand_speed)</code></pre>
-<pre><code>## By hand: 2.718426</code></pre>
+<pre><code>## By hand: 2.521275</code></pre>
 </div>
 </div>
 </div>

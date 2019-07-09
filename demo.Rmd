@@ -21,7 +21,7 @@ The official `caret` documentation is one of the most comphrehensive I have seen
 
 # TL;DR
 
-`caret` allows you to write your own programme but it is hard to start from scratch. This demo shows you how you can retreive the code of an existing model and take bits and pieces from it to intriduce a new function to `caret`.
+`caret` allows you to write your own programme but it is hard to start from scratch. This demo shows you how you can retreive the code of an existing model and take bits and pieces from it to introduce a new function to `caret`.
 
 # Demo
 
@@ -57,7 +57,7 @@ So there are 2 tuning parameters namely $\lambda$ and $\gamma$.
 
 ## Existing models
 
-Out of the box `caret` includes quite a few machine learning programmes such as `rf`, `ranger`, `gbm` and `glmnet`. There are 2 ways to get the codes of these included models:
+Out of the box `caret` includes quite a few machine learning models such as `rf`, `ranger`, `gbm` and `glmnet`. There are 2 ways to get the codes of these included models:
 
 1. Go to the github page of `caret`, look under the folder called "models": https://github.com/topepo/caret
 2. Make use of the `getModelInfo` function that comes with `caret`: See below
@@ -420,8 +420,6 @@ fused_lasso <- list(library = "genlasso",
                     
                     prob = NULL,
                     
-                    varImp = NULL,
-                    
                     sort = function(x) x[order(-x$lambda, x$gamma),]
 )
 ```
@@ -578,6 +576,8 @@ difference <- left_join(caret_rmse, by_hand_fit, by = c("gamma", "lambda")) %>%
 # 25 zero's because there are 5 gammas and 5 lambdas (hence 25 combinations)
 difference$abs_diff
 ```
+
+So it seems that it's working ok!
 
 ### Time
 
