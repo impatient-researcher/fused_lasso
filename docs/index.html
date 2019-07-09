@@ -1979,7 +1979,7 @@ colnames(df) &lt;- c(&quot;y&quot;, paste0(&quot;X_&quot;, seq(1,10,1)))</code><
 </div>
 <div id="k-folds" class="section level2">
 <h2><span class="header-section-number">4.2</span> K-folds</h2>
-<p>Create 5 custom folds which are hold-out samples when evaluating model performance.</p>
+<p>Create 5 custom folds which are hold-out samples for evaluating model performance.</p>
 <pre class="r"><code>folds &lt;- createFolds(y, 5, returnTrain = TRUE); length(folds)</code></pre>
 <pre><code>## [1] 5</code></pre>
 </div>
@@ -1989,12 +1989,13 @@ colnames(df) &lt;- c(&quot;y&quot;, paste0(&quot;X_&quot;, seq(1,10,1)))</code><
 
 fitControl &lt;- trainControl(method = &quot;cv&quot;,
                            number = 5,
-                           index = folds, # specified hold-out samples for future comparison with by-hand results
+                           index = folds, # specified hold-out samples for comparison w/ by-hand
                            savePredictions = TRUE)
 
 check_caret &lt;- train(y ~ ., df,
                      method = fused_lasso,
-                     tuneLength = 5, # notice here the default grid search is a bit silly - for testing only! dont use it in production!
+                     tuneLength = 5, # notice here the default grid search is a bit silly
+                                     # for testing only! dont use it in production!
                      trControl = fitControl)
 
 end_time1 &lt;- Sys.time()
@@ -2101,9 +2102,9 @@ difference$abs_diff</code></pre>
 <h3><span class="header-section-number">4.5.2</span> Time</h3>
 <p>And it seems <code>caret</code> is no faster than doing it by hand but much cleaner code I think.</p>
 <pre class="r"><code>cat(&quot;Caret:&quot;, caret_speed, &quot;\n&quot;)</code></pre>
-<pre><code>## Caret: 2.905325</code></pre>
+<pre><code>## Caret: 2.913884</code></pre>
 <pre class="r"><code>cat(&quot;By hand:&quot;, by_hand_speed)</code></pre>
-<pre><code>## By hand: 2.701707</code></pre>
+<pre><code>## By hand: 2.718426</code></pre>
 </div>
 </div>
 </div>

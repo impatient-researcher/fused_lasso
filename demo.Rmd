@@ -452,7 +452,7 @@ colnames(df) <- c("y", paste0("X_", seq(1,10,1)))
 
 ## K-folds
 
-Create 5 custom folds which are hold-out samples when evaluating model performance.
+Create 5 custom folds which are hold-out samples for evaluating model performance.
 
 ```{r k folds, message=FALSE, warning=FALSE, paged.print=TRUE}
 folds <- createFolds(y, 5, returnTrain = TRUE); length(folds)
@@ -465,12 +465,13 @@ start_time1 <- Sys.time()
 
 fitControl <- trainControl(method = "cv",
                            number = 5,
-                           index = folds, # specified hold-out samples for future comparison with by-hand results
+                           index = folds, # specified hold-out samples for comparison w/ by-hand
                            savePredictions = TRUE)
 
 check_caret <- train(y ~ ., df,
                      method = fused_lasso,
-                     tuneLength = 5, # notice here the default grid search is a bit silly - for testing only! dont use it in production!
+                     tuneLength = 5, # notice here the default grid search is a bit silly
+                                     # for testing only! dont use it in production!
                      trControl = fitControl)
 
 end_time1 <- Sys.time()
