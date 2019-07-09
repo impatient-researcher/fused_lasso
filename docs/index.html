@@ -1603,7 +1603,7 @@ library(penalized)</code></pre>
 ##     }
 ##     out
 ## }</code></pre>
-<p>It looks horrible but all you need to care is that the object <code>out</code> takes different forms depending on whether the user specifies <code>tuneLength</code> or a random searchl; and if <code>tuneLength</code> is chosen, then you set up a grid via <code>expand.grid</code> like so:</p>
+<p>It looks horrible but all you need to care is that the object <code>out</code> takes different forms depending on whether the user specifies <code>tuneLength</code> or a random search; and if <code>tuneLength</code> is chosen, then you set up a grid via <code>expand.grid</code> like so:</p>
 <pre class="r"><code>out &lt;- expand.grid(alpha = seq(0.1, 1, length = len), lambda = lambda)</code></pre>
 <p>or else you do a random search via <code>runif</code> like so:</p>
 <pre class="r"><code>out &lt;- data.frame(alpha = runif(len, min = 0, 1), lambda = 2^runif(len, min = -10, 3))</code></pre>
@@ -1626,7 +1626,7 @@ library(penalized)</code></pre>
 </div>
 <div id="fit-important" class="section level3">
 <h3><span class="header-section-number">3.3.3</span> fit (important!)</h3>
-<p>This is the main workhorse of the <code>caret</code> model where you actually specify what function to use!</p>
+<p>This is the main workhorse of the <code>caret</code> model where you specify what model to fit!</p>
 <p>Let’s first start by looking at how <code>glmnet</code> does it.</p>
 <pre class="r"><code>glmnetModelInfo[names(glmnetModelInfo) %in% c(&quot;fit&quot;)]</code></pre>
 <pre><code>## $fit
@@ -1691,7 +1691,8 @@ out &lt;- do.call(glmnet::glmnet, modelArgs)</code></pre>
 <p>For those curious minds out there, you may be wondering why on earth there is a mysterious line of code that says this:</p>
 <pre class="r"><code>if(!is.na(param$lambda[1])) out$lambdaOpt &lt;- param$lambda[1]</code></pre>
 <p>My honest answer is that that’s becasue it is there in <code>glmnet</code> so I retain it in my <code>fussed_lasso</code> fucntion.</p>
-<p>If you are not happy with that answer, I will also offer my intuition: when you run <code>glmnet</code> or <code>fusedlasso1d</code>, the function will automatically calculate the <span class="math inline">\(\hat\beta\)</span>’s for various <span class="math inline">\(\lambda\)</span> values so each <code>fit</code> object is not associated with a single <span class="math inline">\(\lambda\)</span> value but a series of <span class="math inline">\(\lambda\)</span> value<strong>s</strong>. But for the subsequent <code>predict</code> element <code>caret</code> requires us to define, it calls back from the <code>fit</code> element for a single <span class="math inline">\(\lambda\)</span> value so we have to include it in the <code>fit</code> element.</p>
+<p>If you are not happy with that answer, I will also offer my intuition: when you run <code>glmnet</code> or <code>fusedlasso1d</code>, the function will automatically calculate <span class="math inline">\(\hat\beta\)</span>’s corresponding to a series of <span class="math inline">\(\lambda\)</span> values so a <code>fit</code> object is not associated with a single <span class="math inline">\(\lambda\)</span> value but a series of <span class="math inline">\(\lambda\)</span> value<strong>s</strong>. (and you have more than 1 fit object because you are looping through a series of tuning parameters, in this case <span class="math inline">\(\gamma\)</span>)</p>
+<p>But for the subsequent <code>predict</code> element <code>caret</code> requires us to define, it calls back from the <code>fit</code> element for a single <span class="math inline">\(\lambda\)</span> value so we have to include it in the <code>fit</code> element.</p>
 <p>Not the clearest explanation I know but hopefully it will become clearer after you go through the next section.</p>
 </div>
 <div id="predict-and-loop-difficult" class="section level3">
@@ -1731,7 +1732,7 @@ out &lt;- do.call(glmnet::glmnet, modelArgs)</code></pre>
 <p>If you just focus on line 6, you can see that all this <code>predict</code> element is doing is simply this:</p>
 <pre class="r"><code>out &lt;- predict(modelFit, newdata, s = modelFit$lambdaOpt)</code></pre>
 <p>Where the <code>lambdaOpt</code> value we defined earlier in the <code>fit</code> element is being used here.</p>
-<p>Then there is something called <code>submodels</code> on line 14. This mysterious term comes from another <code>caret</code> element namely <code>loop</code>:</p>
+<p>Then there is something called <code>submodels</code> on line 14. This mysterious term actually comes from another <code>caret</code> element namely <code>loop</code>:</p>
 <pre class="r"><code>glmnetModelInfo[names(glmnetModelInfo) %in% c(&quot;loop&quot;)]</code></pre>
 <pre><code>## $loop
 ## function (grid) 
@@ -1747,7 +1748,7 @@ out &lt;- do.call(glmnet::glmnet, modelArgs)</code></pre>
 ##     }
 ##     list(loop = loop, submodels = submodels)
 ## }</code></pre>
-<p><code>submodels</code> are closely linked to how the 2 functions <code>glmnet</code>and <code>fusedlasso1d</code> are written up. If you recall what I said about them in the previous section, the <code>fit</code> object resulted from these two functions is associated with a series of <span class="math inline">\(\lambda\)</span> values so when you are tuning the model for different values of <span class="math inline">\(\lambda\)</span>, you do not need to re-fit the model again.</p>
+<p><code>submodels</code> are only relevant for certain functions. If you recall what I said about them in the previous section, the <code>fit</code> object resulted from <code>glmnet</code> and <code>fusedlasso1d</code> is associated with a series of <span class="math inline">\(\lambda\)</span> values so when you are tuning the model for different values of <span class="math inline">\(\lambda\)</span>, you do not need to re-fit the model again.</p>
 <p>Consider the following example, suppose that I am tuning my fused lasso model using the following grid:</p>
 <pre class="r"><code>example_grid &lt;- expand.grid(gamma = 1, lambda = seq(1,5,1)); example_grid</code></pre>
 <pre><code>##   gamma lambda
@@ -1756,7 +1757,7 @@ out &lt;- do.call(glmnet::glmnet, modelArgs)</code></pre>
 ## 3     1      3
 ## 4     1      4
 ## 5     1      5</code></pre>
-<p>I can of course fit 5 models where each model corresponds to a row of the grid (which is very time consuming btw) or just fit <code>fusedlasso1d</code> once setting <span class="math inline">\(\gamma\)</span> and <span class="math inline">\(\lambda\)</span> both to 1, then derive predictions associated with the remaining 4 <span class="math inline">\(\lambda\)</span> values (row 2 to 5) - these 4 models are what <code>caret</code> calls <code>submodels</code>.</p>
+<p>I can of course fit 5 models where each model corresponds to a row of the grid (which is very time consuming btw) or just fit <code>fusedlasso1d</code> once setting <span class="math inline">\(\gamma\)</span> and <span class="math inline">\(\lambda\)</span> both to 1, then derive predictions associated with the remaining 4 <span class="math inline">\(\lambda\)</span> values (row 2 to 5) as they also have <span class="math inline">\(\gamma\)</span> set equal to 1 - these 4 models are what <code>caret</code> calls <code>submodels</code>.</p>
 <p>To make things even more confusing, in the context of <code>glmnet</code>, <code>caret</code> calls <code>alpha</code> a “fixed” parameter while calling <code>lambda</code> a “sequential” parameter. And in the case of <code>fusedlasso1d</code>, <code>gamma</code> is “fixed” and <code>lambda</code> is “sequential”.</p>
 <p>If you need more examples to get your head round this, see <a href="https://topepo.github.io/caret/using-your-own-model-in-train.html#illustrative-example-2-something-more-complicated---logitboost" class="uri">https://topepo.github.io/caret/using-your-own-model-in-train.html#illustrative-example-2-something-more-complicated---logitboost</a>.</p>
 <pre class="r"><code># defining submodels
@@ -1984,7 +1985,7 @@ colnames(df) &lt;- c(&quot;y&quot;, paste0(&quot;X_&quot;, seq(1,10,1)))</code><
 </div>
 <div id="fussed_lasso-under-caret" class="section level2">
 <h2><span class="header-section-number">4.3</span> <code>fussed_lasso</code> under <code>caret</code></h2>
-<pre class="r"><code>start_time &lt;- Sys.time()
+<pre class="r"><code>start_time1 &lt;- Sys.time()
 
 fitControl &lt;- trainControl(method = &quot;cv&quot;,
                            number = 5,
@@ -1996,13 +1997,13 @@ check_caret &lt;- train(y ~ ., df,
                      tuneLength = 5, # notice here the default grid search is a bit silly - for testing only! dont use it in production!
                      trControl = fitControl)
 
-end_time &lt;- Sys.time()
+end_time1 &lt;- Sys.time()
 
-caret_speed &lt;- end_time - start_time</code></pre>
+caret_speed &lt;- end_time1 - start_time1</code></pre>
 </div>
 <div id="fused-lasso-by-hand" class="section level2">
 <h2><span class="header-section-number">4.4</span> Fused lasso by hand</h2>
-<pre class="r"><code>start_time &lt;- Sys.time()
+<pre class="r"><code>start_time2 &lt;- Sys.time()
 
 # re-arrange training data into a list according to &quot;fold&quot; indices
 train_test_data_list &lt;- lapply(c(1:length(folds)), function(index){
@@ -2054,7 +2055,7 @@ by_hand_fit &lt;- lapply(1:nrow(gamma_grid), function(par_index){
       
       lambda = lambda_grid$lambda[lambda_index]
         
-      # make sure it says &quot;test&quot;&quot; here!  
+      # make sure it says &quot;test&quot; here!  
       data.frame(actual = fold[[&quot;test&quot;]][[&quot;outcome&quot;]],
                  prediction = predict(object = fused,
                                       Xnew = fold[[&quot;test&quot;]][[&quot;covariate&quot;]], 
@@ -2076,9 +2077,9 @@ by_hand_fit &lt;- lapply(1:nrow(gamma_grid), function(par_index){
   ungroup() %&gt;%
   arrange(lambda)
 
-end_time &lt;- Sys.time()
+end_time2 &lt;- Sys.time()
 
-by_hand_speed &lt;- end_time - start_time</code></pre>
+by_hand_speed &lt;- end_time2 - start_time2</code></pre>
 </div>
 <div id="compare-results" class="section level2">
 <h2><span class="header-section-number">4.5</span> Compare results</h2>
@@ -2098,11 +2099,11 @@ difference$abs_diff</code></pre>
 </div>
 <div id="time" class="section level3">
 <h3><span class="header-section-number">4.5.2</span> Time</h3>
-<p>And it seems <code>caret</code> is a tiny bit faster than doing it by hand. I reckon the gain will be more significant in the context of timeslicing.</p>
+<p>And it seems <code>caret</code> is no faster than doing it by hand but much cleaner code I think.</p>
 <pre class="r"><code>cat(&quot;Caret:&quot;, caret_speed, &quot;\n&quot;)</code></pre>
-<pre><code>## Caret: 4.357949</code></pre>
+<pre><code>## Caret: 2.905325</code></pre>
 <pre class="r"><code>cat(&quot;By hand:&quot;, by_hand_speed)</code></pre>
-<pre><code>## By hand: 3.276065</code></pre>
+<pre><code>## By hand: 2.701707</code></pre>
 </div>
 </div>
 </div>

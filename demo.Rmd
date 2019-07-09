@@ -122,7 +122,7 @@ The `grid` element deals with the first 2 methods.
 glmnetModelInfo[names(glmnetModelInfo) %in% c("grid")]
 ```
 
-It looks horrible but all you need to care is that the object `out` takes different forms depending on whether the user specifies `tuneLength` or a random searchl; and if `tuneLength` is chosen, then you set up a grid via `expand.grid` like so:
+It looks horrible but all you need to care is that the object `out` takes different forms depending on whether the user specifies `tuneLength` or a random search; and if `tuneLength` is chosen, then you set up a grid via `expand.grid` like so:
 
 ```{r highlight grid, message=FALSE, warning=FALSE, eval = FALSE, paged.print=TRUE}
 out <- expand.grid(alpha = seq(0.1, 1, length = len), lambda = lambda)
@@ -158,7 +158,7 @@ fused_lasso$grid <- function(x, y, len = NULL, search = "grid") {
 
 ### fit (important!)
 
-This is the main workhorse of the `caret` model where you actually specify what function to use! 
+This is the main workhorse of the `caret` model where you specify what model to fit! 
 
 Let's first start by looking at how `glmnet` does it.
 
@@ -220,7 +220,9 @@ if(!is.na(param$lambda[1])) out$lambdaOpt <- param$lambda[1]
 
 My honest answer is that that's becasue it is there in `glmnet` so I retain it in my `fussed_lasso` fucntion. 
 
-If you are not happy with that answer, I will also offer my intuition: when you run `glmnet` or `fusedlasso1d`, the function will automatically calculate the $\hat\beta$'s for various $\lambda$ values so each `fit` object is not associated with a single $\lambda$ value but a series of $\lambda$ value**s**. But for the subsequent `predict` element `caret` requires us to define, it calls back from the `fit` element for a single $\lambda$ value so we have to include it in the `fit` element.
+If you are not happy with that answer, I will also offer my intuition: when you run `glmnet` or `fusedlasso1d`, the function will automatically calculate  $\hat\beta$'s corresponding to a series of $\lambda$ values so a `fit` object is not associated with a single $\lambda$ value but a series of $\lambda$ value**s**. (and you have more than 1 fit object because you are looping through a series of tuning parameters, in this case $\gamma$)
+
+But for the subsequent `predict` element `caret` requires us to define, it calls back from the `fit` element for a single $\lambda$ value so we have to include it in the `fit` element.
 
 Not the clearest explanation I know but hopefully it will become clearer after you go through the next section.
 
@@ -238,13 +240,13 @@ out <- predict(modelFit, newdata, s = modelFit$lambdaOpt)
 
 Where the `lambdaOpt` value we defined earlier in the `fit` element is being used here.
 
-Then there is something called `submodels` on line 14. This mysterious term comes from another `caret` element namely `loop`:
+Then there is something called `submodels` on line 14. This mysterious term actually comes from another `caret` element namely `loop`:
 
 ```{r loop, message=FALSE, warning=FALSE, paged.print=TRUE}
 glmnetModelInfo[names(glmnetModelInfo) %in% c("loop")]
 ```
 
-`submodels` are closely linked to how the 2 functions `glmnet`and `fusedlasso1d` are written up. If you recall what I said about them in the previous section, the `fit` object resulted from these two functions is associated with a series of $\lambda$ values so when you are tuning the model for different values of $\lambda$, you do not need to re-fit the model again.
+`submodels` are only relevant for certain functions. If you recall what I said about them in the previous section, the `fit` object resulted from `glmnet` and `fusedlasso1d` is associated with a series of $\lambda$ values so when you are tuning the model for different values of $\lambda$, you do not need to re-fit the model again.
 
 Consider the following example, suppose that I am tuning my fused lasso model using the following grid:
 
@@ -252,7 +254,7 @@ Consider the following example, suppose that I am tuning my fused lasso model us
 example_grid <- expand.grid(gamma = 1, lambda = seq(1,5,1)); example_grid
 ```
 
-I can of course fit 5 models where each model corresponds to a row of the grid (which is very time consuming btw) or just fit `fusedlasso1d` once setting $\gamma$ and $\lambda$ both to 1, then derive predictions associated with the remaining 4 $\lambda$ values (row 2 to 5) - these 4 models are what `caret` calls `submodels`.
+I can of course fit 5 models where each model corresponds to a row of the grid (which is very time consuming btw) or just fit `fusedlasso1d` once setting $\gamma$ and $\lambda$ both to 1, then derive predictions associated with the remaining 4 $\lambda$ values (row 2 to 5) as they also have $\gamma$ set equal to 1 - these 4 models are what `caret` calls `submodels`.
 
 To make things even more confusing, in the context of `glmnet`, `caret` calls `alpha` a "fixed" parameter while calling `lambda` a "sequential" parameter. And in the case of `fusedlasso1d`, `gamma` is "fixed" and `lambda` is "sequential".
 
@@ -459,7 +461,7 @@ folds <- createFolds(y, 5, returnTrain = TRUE); length(folds)
 ## `fussed_lasso` under `caret`
 
 ```{r fused lasso caret, message=FALSE, warning=FALSE, paged.print=TRUE}
-start_time <- Sys.time()
+start_time1 <- Sys.time()
 
 fitControl <- trainControl(method = "cv",
                            number = 5,
@@ -471,15 +473,15 @@ check_caret <- train(y ~ ., df,
                      tuneLength = 5, # notice here the default grid search is a bit silly - for testing only! dont use it in production!
                      trControl = fitControl)
 
-end_time <- Sys.time()
+end_time1 <- Sys.time()
 
-caret_speed <- end_time - start_time
+caret_speed <- end_time1 - start_time1
 ```
 
 ## Fused lasso by hand
 
 ```{r fused lasso by hand, message=FALSE, warning=FALSE, paged.print=TRUE}
-start_time <- Sys.time()
+start_time2 <- Sys.time()
 
 # re-arrange training data into a list according to "fold" indices
 train_test_data_list <- lapply(c(1:length(folds)), function(index){
@@ -531,7 +533,7 @@ by_hand_fit <- lapply(1:nrow(gamma_grid), function(par_index){
       
       lambda = lambda_grid$lambda[lambda_index]
         
-      # make sure it says "test"" here!  
+      # make sure it says "test" here!  
       data.frame(actual = fold[["test"]][["outcome"]],
                  prediction = predict(object = fused,
                                       Xnew = fold[["test"]][["covariate"]], 
@@ -553,9 +555,9 @@ by_hand_fit <- lapply(1:nrow(gamma_grid), function(par_index){
   ungroup() %>%
   arrange(lambda)
 
-end_time <- Sys.time()
+end_time2 <- Sys.time()
 
-by_hand_speed <- end_time - start_time
+by_hand_speed <- end_time2 - start_time2
 ```
 
 ## Compare results
@@ -578,7 +580,7 @@ difference$abs_diff
 
 ### Time
 
-And it seems `caret` is a tiny bit faster than doing it by hand. I reckon the gain will be more significant in the context of timeslicing.
+And it seems `caret` is no faster than doing it by hand but much cleaner code I think.
 
 ```{r fused lasso spped comparison, message=FALSE, warning=FALSE, paged.print=TRUE}
 cat("Caret:", caret_speed, "\n")
