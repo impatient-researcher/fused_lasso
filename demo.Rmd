@@ -218,9 +218,9 @@ For those curious minds out there, you may be wondering why on earth there is a 
 if(!is.na(param$lambda[1])) out$lambdaOpt <- param$lambda[1]
 ```
 
-My honest answer is that that's becasue it is there in `glmnet` so I retain it in my `fussed_lasso` fucntion. 
+My honest answer is that since it is there in `glmnet` so I retained it in my `fussed_lasso` fucntion. 
 
-If you are not happy with that answer, I will also offer my intuition: when you run `glmnet` or `fusedlasso1d`, the function will automatically calculate  $\hat\beta$'s corresponding to a series of $\lambda$ values so a `fit` object is not associated with a single $\lambda$ value but a series of $\lambda$ value**s**. (and you have more than 1 fit object because you are looping through a series of tuning parameters, in this case $\gamma$)
+If you are not happy with that answer, I will also offer my intuition: when you run `glmnet` or `fusedlasso1d`, the function will automatically calculate  $\hat\beta$'s corresponding to a series of $\lambda$ values so a `fit` object is not associated with a single $\lambda$ value but a series of $\lambda$ value**s** (and you have more than 1 fit object because you are looping through a series of tuning parameters, in this case $\gamma$).
 
 But for the subsequent `predict` element `caret` requires us to define, it calls back from the `fit` element for a single $\lambda$ value so we have to include it in the `fit` element.
 
@@ -238,7 +238,7 @@ If you just focus on line 6, you can see that all this `predict` element is doin
 out <- predict(modelFit, newdata, s = modelFit$lambdaOpt)
 ```
 
-Where the `lambdaOpt` value we defined earlier in the `fit` element is being used here.
+where the `lambdaOpt` value we defined earlier in the `fit` element is being used here! That's why we had to have it defined in the `fit` element.
 
 Then there is something called `submodels` on line 14. This mysterious term actually comes from another `caret` element namely `loop`:
 
@@ -246,7 +246,7 @@ Then there is something called `submodels` on line 14. This mysterious term actu
 glmnetModelInfo[names(glmnetModelInfo) %in% c("loop")]
 ```
 
-`submodels` are only relevant for certain functions. If you recall what I said about them in the previous section, the `fit` object resulted from `glmnet` and `fusedlasso1d` is associated with a series of $\lambda$ values so when you are tuning the model for different values of $\lambda$, you do not need to re-fit the model again.
+`submodels` are only relevant for certain functions. If you recall what I said about `glmnet` and `fusedlasso1d` in the previous section, the `fit` object resulted from these 2 models is associated with a series of $\lambda$ values so when you are tuning the model for different values of $\lambda$, you do not need to re-fit the model again.
 
 Consider the following example, suppose that I am tuning my fused lasso model using the following grid:
 

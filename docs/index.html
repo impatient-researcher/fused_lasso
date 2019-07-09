@@ -1690,8 +1690,8 @@ out &lt;- do.call(glmnet::glmnet, modelArgs)</code></pre>
 <p>and that’s about it.</p>
 <p>For those curious minds out there, you may be wondering why on earth there is a mysterious line of code that says this:</p>
 <pre class="r"><code>if(!is.na(param$lambda[1])) out$lambdaOpt &lt;- param$lambda[1]</code></pre>
-<p>My honest answer is that that’s becasue it is there in <code>glmnet</code> so I retain it in my <code>fussed_lasso</code> fucntion.</p>
-<p>If you are not happy with that answer, I will also offer my intuition: when you run <code>glmnet</code> or <code>fusedlasso1d</code>, the function will automatically calculate <span class="math inline">\(\hat\beta\)</span>’s corresponding to a series of <span class="math inline">\(\lambda\)</span> values so a <code>fit</code> object is not associated with a single <span class="math inline">\(\lambda\)</span> value but a series of <span class="math inline">\(\lambda\)</span> value<strong>s</strong>. (and you have more than 1 fit object because you are looping through a series of tuning parameters, in this case <span class="math inline">\(\gamma\)</span>)</p>
+<p>My honest answer is that since it is there in <code>glmnet</code> so I retained it in my <code>fussed_lasso</code> fucntion.</p>
+<p>If you are not happy with that answer, I will also offer my intuition: when you run <code>glmnet</code> or <code>fusedlasso1d</code>, the function will automatically calculate <span class="math inline">\(\hat\beta\)</span>’s corresponding to a series of <span class="math inline">\(\lambda\)</span> values so a <code>fit</code> object is not associated with a single <span class="math inline">\(\lambda\)</span> value but a series of <span class="math inline">\(\lambda\)</span> value<strong>s</strong> (and you have more than 1 fit object because you are looping through a series of tuning parameters, in this case <span class="math inline">\(\gamma\)</span>).</p>
 <p>But for the subsequent <code>predict</code> element <code>caret</code> requires us to define, it calls back from the <code>fit</code> element for a single <span class="math inline">\(\lambda\)</span> value so we have to include it in the <code>fit</code> element.</p>
 <p>Not the clearest explanation I know but hopefully it will become clearer after you go through the next section.</p>
 </div>
@@ -1731,7 +1731,7 @@ out &lt;- do.call(glmnet::glmnet, modelArgs)</code></pre>
 ## }</code></pre>
 <p>If you just focus on line 6, you can see that all this <code>predict</code> element is doing is simply this:</p>
 <pre class="r"><code>out &lt;- predict(modelFit, newdata, s = modelFit$lambdaOpt)</code></pre>
-<p>Where the <code>lambdaOpt</code> value we defined earlier in the <code>fit</code> element is being used here.</p>
+<p>where the <code>lambdaOpt</code> value we defined earlier in the <code>fit</code> element is being used here! That’s why we had to have it defined in the <code>fit</code> element.</p>
 <p>Then there is something called <code>submodels</code> on line 14. This mysterious term actually comes from another <code>caret</code> element namely <code>loop</code>:</p>
 <pre class="r"><code>glmnetModelInfo[names(glmnetModelInfo) %in% c(&quot;loop&quot;)]</code></pre>
 <pre><code>## $loop
@@ -1748,7 +1748,7 @@ out &lt;- do.call(glmnet::glmnet, modelArgs)</code></pre>
 ##     }
 ##     list(loop = loop, submodels = submodels)
 ## }</code></pre>
-<p><code>submodels</code> are only relevant for certain functions. If you recall what I said about them in the previous section, the <code>fit</code> object resulted from <code>glmnet</code> and <code>fusedlasso1d</code> is associated with a series of <span class="math inline">\(\lambda\)</span> values so when you are tuning the model for different values of <span class="math inline">\(\lambda\)</span>, you do not need to re-fit the model again.</p>
+<p><code>submodels</code> are only relevant for certain functions. If you recall what I said about <code>glmnet</code> and <code>fusedlasso1d</code> in the previous section, the <code>fit</code> object resulted from these 2 models is associated with a series of <span class="math inline">\(\lambda\)</span> values so when you are tuning the model for different values of <span class="math inline">\(\lambda\)</span>, you do not need to re-fit the model again.</p>
 <p>Consider the following example, suppose that I am tuning my fused lasso model using the following grid:</p>
 <pre class="r"><code>example_grid &lt;- expand.grid(gamma = 1, lambda = seq(1,5,1)); example_grid</code></pre>
 <pre><code>##   gamma lambda
@@ -2101,9 +2101,9 @@ difference$abs_diff</code></pre>
 <h3><span class="header-section-number">4.5.2</span> Time</h3>
 <p>And it seems <code>caret</code> is no faster than doing it by hand but much cleaner code I think.</p>
 <pre class="r"><code>cat(&quot;Caret:&quot;, caret_speed, &quot;\n&quot;)</code></pre>
-<pre><code>## Caret: 2.659596</code></pre>
+<pre><code>## Caret: 3.784046</code></pre>
 <pre class="r"><code>cat(&quot;By hand:&quot;, by_hand_speed)</code></pre>
-<pre><code>## By hand: 2.521275</code></pre>
+<pre><code>## By hand: 3.145704</code></pre>
 </div>
 </div>
 </div>
