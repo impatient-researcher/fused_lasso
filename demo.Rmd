@@ -254,7 +254,7 @@ Consider the following example, suppose that I am tuning my fused lasso model us
 example_grid <- expand.grid(gamma = 1, lambda = seq(1,5,1)); example_grid
 ```
 
-I can of course fit 5 models where each model corresponds to a row of the grid (which is very time consuming btw) or just fit `fusedlasso1d` once setting $\gamma$ and $\lambda$ both to 1, then derive predictions associated with the remaining 4 $\lambda$ values (row 2 to 5) as they also have $\gamma$ set equal to 1 - these 4 models are what `caret` calls `submodels`.
+I can of course fit 5 models where each model corresponds to a row of the grid (which is very time consuming btw) but it's better if I just fit `fusedlasso1d` once setting $\gamma$ and $\lambda$ both to 1, then derive predictions associated with the remaining 4 $\lambda$ values (row 2 to 5) as they also have $\gamma$ set equal to 1 - these 4 models are precisely what `caret` calls `submodels`.
 
 To make things even more confusing, in the context of `glmnet`, `caret` calls `alpha` a "fixed" parameter while calling `lambda` a "sequential" parameter. And in the case of `fusedlasso1d`, `gamma` is "fixed" and `lambda` is "sequential".
 
@@ -326,7 +326,7 @@ fused_lasso$predict <- function(modelFit, newdata, submodels = NULL) {
 glmnetModelInfo[names(glmnetModelInfo) %in% c("prob", "sort")]
 ```
 
-Let's replicate that for fused lasso:
+As you can see, `sort` only affects how results are shown so let's keep that as is for my new function:
 ```{r replicate prob and sort, message=FALSE, warning=FALSE, paged.print=TRUE}
 # because I am lazy
 fused_lasso$prob <- NULL
@@ -558,6 +558,24 @@ end_time2 <- Sys.time()
 
 by_hand_speed <- end_time2 - start_time2
 ```
+
+## Sanity check
+
+Recall how I generated the data, only the first 2 covariates were used to generated my y's. If my `fused_lasso` is working, it should give me just 2 not-so-close-to-zero $\beta$'s. 
+
+```{r sanity check, message=FALSE, warning=FALSE, paged.print=TRUE}
+# retreive final model
+final_model <- check_caret$finalModel
+
+# best-tuned parameter
+best_tuned_lambda <- check_caret$bestTune$lambda
+
+# retreive the beta coefficients
+plot(coef(final_model, lambda = best_tuned_lambda)$beta,
+     main = paste("Best-tuned Lambda for fused lasso:", round(best_tuned_lambda, 4)))
+```
+
+Ok it looks alright.
 
 ## Compare results
 
