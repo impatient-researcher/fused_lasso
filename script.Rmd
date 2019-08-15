@@ -1,0 +1,715 @@
+---
+title: "Machine Learning"
+author: "Yan Ting Hin"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
+---
+
+# Preambles
+
+## Libraries
+```{r preamble, message=F, warning=F}
+library(midasr)
+library(caret)
+library(magrittr)
+library(nloptr)
+library(gbm)
+library(mboost)
+library(glmnet)
+library(genlasso)
+
+library(numDeriv)
+library(rpart)
+library(rpart.plot)
+library(parallel)
+library(doParallel)
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+library(gridExtra)
+library(tidyr)
+```
+
+## Set ggplot theme
+```{r ggplot theme, message=F, warning=F}
+theme_econ5170 <- function(){
+  
+    theme_set(theme_bw()) +
+    theme(text = element_text(size=12),
+            plot.title = element_text(face = "bold"),
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(),
+            strip.background = element_blank(),
+            legend.key = element_rect(colour = "transparent",
+                                      fill = "transparent"),
+            legend.position = c(0.75, 0.85))
+  
+}
+```
+
+## User-defined functions
+
+### Main functions
+```{r user defined, message=F, warning=F}
+source("dgp.R")
+source("expo_almon.R")
+source("nloptr.R")
+source("ml.R")
+source("fused_lasso.R")
+```
+
+### Others
+Define the minimisation problem for MIDAS
+```{r rss, message=F, warning=F}
+rss <- function(theta, outcome, features, no_of_lags) {
+  
+  rho = theta[1]
+  betaN = theta[2]
+  alpha = c(theta[3], theta[4])
+
+  almon = almon_weight(alpha, no_of_lags)
+  sum((outcome - betaN - rho * (features %*% almon))^2)
+  
+}
+```
+
+And the gradient
+```{r gradient, message=F, warning=F}
+gradient <- function(theta, outcome, features, no_of_lags) {
+  
+  rho = theta[1]
+  betaN = theta[2]
+  alpha = c(theta[3], theta[4])
+  
+  # j tells you the index of lags
+  j = 0:(no_of_lags-1)
+  
+  # bigT tells you the time dimension
+  bigT = length(outcome)
+  
+  # first obtain the polynomial
+  pl = poly(j, degree = 2, raw = TRUE)
+  
+  # exponetiating the polynomials
+  # effectively exp(pl %*% alpha)
+  almon = almon_weight(alpha, no_of_lags)
+  
+  # when differentiating almon wrt alpha1 and alpha2
+  # you get pl * almon which is a Nx2 matrix
+  # (with no_of_lags being the number of regressors and 
+  #     2 being the length of c(alpha1, alpha2))
+  
+  # features is a TxN matrix and rho is a scalar
+  d_alpha = rho * features %*% (pl * almon)
+  
+  d_rho = features %*% almon
+  d_betaN = as.matrix(rep(1, bigT), ncol = 1)
+  
+  # d_betaN is Tx1, d_rho is Tx1 and d_alpha is a Tx2 matrix
+  # therefore the resulting jacobian is a Tx4 matrix
+  jacob = cbind(d_rho, d_betaN, d_alpha)
+  
+  # the residuals are caluclated as a Tx1 vector
+  resid = (outcome - betaN - rho * (features %*% almon))
+  
+  # do a cross product, should get you a 4x1 vector
+  # where 4 is the length of theta
+  as.vector(-2 * crossprod(jacob, resid))
+  
+}
+```
+
+# Data
+
+## Monte-carlo simulation
+
+### Parameters initiation
+```{r parameters, message=F, warning=F}
+# total length of the time series
+TT <- 1000  
+
+# total number of lags 
+N <- 20       # baseline (1 month)
+N_alt <- 60   # alternative (3 months)
+```
+
+### DGP 1
+Define parameter values for DGP 1
+```{r parameters dgp 1, message=F, warning=F}
+set.seed(2019)
+
+betaN <- 2
+rho <- 1
+alpha <- c(1, -0.5)
+theta <- c(rho, betaN, alpha)
+
+# baseline specifications
+dgp1_20 <- gen_exp_almon_data(nobs = TT, no_of_lags = N, betaN = betaN, rho = rho, alpha = alpha)
+
+## retrieve baseline dgp1 data
+dgp1_20_df <- dgp1_20$data
+
+## plot baseline weights
+plot(dgp1_20$weight, main = "Exponential Almon Weights in DGP 1 (Baseline)")
+
+# alternative specifications
+dgp1_60 <- gen_exp_almon_data(nobs = TT, no_of_lags = N_alt, betaN = betaN, rho = rho, alpha = alpha)
+
+## retrieve alternative dgp1 data
+dgp1_60_df <- dgp1_60$data
+
+## plot alternative weights
+plot(dgp1_60$weight, main = "Exponential Almon Weights in DGP 1 (Alternative)")
+```
+
+### DGP 2
+Define parameter values for DGP 2
+```{r parameters dgp 2, message=F, warning=F}
+set.seed(2019)
+
+non_almon_weight_20 = c(exp(seq(0.1, 1.5, length.out = 4)), 
+                     exp(seq(1.5, -2.3, length.out = 8))[-1], 
+                     seq(0.1, 0.0, length.out = 3), 
+                     rep(0, N - 4 -7 -3))
+
+non_almon_weight_60 = c(exp(seq(0.1, 1.5, length.out = 4)), 
+                     exp(seq(1.5, -2.3, length.out = 8))[-1], 
+                     seq(0.1, 0.0, length.out = 3), 
+                     rep(0, N_alt - 4 -7 -3) )
+
+# baseline specifications
+dgp2_20 <- gen_mis_exp_almon_data(nobs = TT, no_of_lags = N, weight = non_almon_weight_20, betaN = betaN, rho = rho)
+
+# retrieve baseline dgp2 data
+dgp2_20_df <- dgp2_20$data
+
+## plot baseline weights
+plot(dgp2_20$weight, main = "Misspecified Exponential Almon Weights in DGP 2 (Baseline)")
+
+# alternative specifications
+dgp2_60 <- gen_mis_exp_almon_data(nobs = TT, no_of_lags = N_alt, weight = non_almon_weight_60, betaN = betaN, rho = rho)
+
+# retrieve baseline dgp2 data
+dgp2_60_df <- dgp2_60$data
+
+## plot baseline weights
+plot(dgp2_60$weight, main = "Misspecified Exponential Almon Weights in DGP 2 (Baseline)")
+```
+
+## Real data example
+```{r real data, message=F, warning=F}
+data("rvsp500", package = "midasr")
+spx2_rvol <- 100 * sqrt(252 * as.numeric(rvsp500[, "SPX2.rv"]))
+
+#head(rvsp500)
+
+# baseline, 20 lags
+d_rv_20 <- data.frame(y = spx2_rvol, X = mls(spx2_rvol,1:20,1)) %>% na.omit()
+
+# alternative, 60 lags
+d_rv_60 <- data.frame(y = spx2_rvol, X = mls(spx2_rvol,1:60,1)) %>% na.omit()
+```
+
+## Training data set
+```{r training data set, message=F, warning=F}
+set.seed(2019)
+
+# define how long the training data set will be for monte-carlo
+training_length = 3000
+
+# dgp's
+training_dgp <- lapply(list(dgp1_20 = dgp1_20$weight, dgp1_60 = dgp1_60$weight,
+                            dgp2_20 = dgp2_20$weight, dgp2_60 = dgp2_60$weight), function(x){
+  
+  # retrieve the weights used in the 2 data generating processes
+  # and use that to create some extra data for training                            
+  dgp <- DGP(training_length, no_of_lags = length(x), x, betaN, rho)
+  df <- cbind.data.frame(y = dgp$y, dgp$X)
+  
+  return(df)
+  
+})
+
+# real data example
+# baseline, 20 lags
+d_rv_20_train = d_rv_20[1:3000,]
+
+# alternative, 60 lags
+d_rv_60_train = d_rv_60[1:3000,]
+
+training_dfs <- c(training_dgp, list(d_rv_20 = d_rv_20_train, d_rv_60 = d_rv_60_train))
+```
+
+## Test data set
+```{r test data set, message=F, warning=F}
+# real data example
+# baseline, 20 lags
+d_rv_20_test  = d_rv_20[3021:nrow(d_rv_20), ] # starting from 3021 so the training data and test data have no overlap
+
+# alternative, 60 lags
+d_rv_60_test  = d_rv_60[3061:nrow(d_rv_60), ] # starting from 3061 so the training data and test data have no overlap
+
+test_dfs <- list(dgp1_20 = dgp1_20_df, dgp1_60 = dgp1_60_df,
+                 dgp2_20 = dgp2_20_df, dgp2_60 = dgp2_60_df,
+                 d_rv_20 = d_rv_20_test, d_rv_60 = d_rv_60_test)
+```
+
+# Analysis
+
+## NLOPTR (Not Run)
+```{r nloptr, message=F, warning=F, eval=F}
+set.seed(2019)
+
+cluster <- makeCluster(detectCores() - 1) # convention to leave 1 core for OS
+registerDoParallel(cluster)
+
+nloptr_all_results <- lapply(test_dfs, function(df) {
+
+  features =  model.matrix(y ~ ., df)[, -1]  # take df and get rid of y to create feature set
+  
+  results = do_nloptr(outcome = df$y,
+                      features = features,
+                      no_of_lags = N,
+                      init = init,
+                      rss = rss,
+                      gradient = gradient)
+  
+  return(results)
+  
+})
+
+stopCluster(cluster)
+registerDoSEQ()
+
+# display results
+lapply(nloptr_all_results, function(result) {
+  
+  result$model
+  
+})
+
+# display crosschecks using optimx
+lapply(nloptr_all_results, function(result) {
+  
+  result$second_opinion
+  
+})
+```
+
+## Machine Learning
+
+### Set up timeslices
+```{r timeslices, message=F, warning=F}
+time_slices <- createTimeSlices(1:training_length,
+                                initialWindow = 240,
+                                horizon = 1,
+                                fixedWindow = TRUE)
+
+#str(time_slices)
+
+mlTimeControl <- trainControl(method = "timeslice",
+                              initialWindow = 240,
+                              savePredictions = "all",
+                              horizon = 1,
+                              fixedWindow = TRUE,
+                              allowParallel = TRUE,
+                              index = time_slices$train,   # create explicit index for time_slices
+                              indexOut = time_slices$test)
+```
+
+### Hyperparameter grid
+```{r hyperparameter grid, message=F, warning=F}
+rf_grid <- expand.grid(
+  mtry = seq(5, 20, 5),                      # choose randomly from how many x variable to do the split
+  splitrule = c("variance"),                 # criteria for deciding whether to split further
+  min.node.size = seq(30, 50, 10))           # minimum node size
+
+gbm_grid <- expand.grid(
+  interaction.depth = seq(1, 5, 1),          # how complex is the tree
+  n.trees = seq(100, 500, 100),              # how many iterations
+  shrinkage = c(0.01, 0.1),                  # how fast it adapts 
+                                             # (the same idea as step size in steepest gradient descent)
+  n.minobsinnode = 20)                       # minimum node size
+
+lasso_grid <- expand.grid(
+  alpha = 1, # alpha = 1 for lasso
+  lambda = exp(-seq(1, 10 ,by = .5)))        # play with lambda to see which ones better
+                                             # use exp because in some lasso chart uses log lambda in x-axis
+
+fused_lasso_grid <- expand.grid(
+  gamma = seq(0, 5, 1),                   # gamma is the sparsity loading
+  lambda = exp(-seq(1, 10 ,by = .5)))        # lambda is the fusion penalty
+```
+
+### Individual machine learning models
+```{r machine learning models, message=F, warning=F}
+set.seed(2019)
+
+training_dfs <- training_dfs[c("d_rv_20", "d_rv_60")]
+
+cluster <- makeCluster(detectCores() - 1)    # convention to leave 1 core for OS
+registerDoParallel(cluster)
+
+ml_all_results <- lapply(training_dfs, function(df) {
+  
+  results = do_ml(df, 
+                  rf_grid = rf_grid,
+                  gbm_grid = gbm_grid,
+                  lasso_grid = lasso_grid,
+                  fused_lasso_grid = fused_lasso_grid,
+                  mlTimeControl)
+  return(results)
+  
+})
+
+stopCluster(cluster)
+registerDoSEQ()
+```
+
+### Stacking/blending
+```{r stacking blending, message=F, warning=F}
+set.seed(2019)
+
+two_layer_stacked <- lapply(c(#"dgp1", "dgp1_60",
+                              #"dgp2", "dgp2_60",
+                              "d_rv_20", "d_rv_60"), function(df){
+  
+  training_data = training_dfs[[df]]       # extract the relevant training data
+  models = ml_all_results[[df]]            # retrieve the relevant ml models
+  
+  stacked = two_layer_stack(training_data,
+                            models,
+                            control,
+                            time_slices)
+  return(stacked)
+                                
+})
+
+names(two_layer_stacked) <- c("d_rv_20", "d_rv_60")
+#names(two_layer_stacked) <- c("dgp1", "dgp1_60", "dgp2", "dgp2_60", "d_rv", "d_rv_60")
+```
+
+# Summary
+
+## Prediction accuracy
+
+### Prediction accuracy (validation data)
+```{r prediction accuracy validation, message=F, warning=F}
+validation_predictions <- lapply(c(#"dgp1", "dgp1_60",
+                              #"dgp2", "dgp2_60",
+                              "d_rv_20", "d_rv_60"), function(df){
+  
+  two_layer_stacked[[df]]$validation_predictions
+  
+})
+
+names(validation_predictions) <- c("d_rv_20", "d_rv_60")
+#names(validation_predictions) <- c("dgp1", "dgp1_60", "dgp2", "dgp2_60", "d_rv", "d_rv_60")
+
+validation_accuracy <- sapply(validation_predictions, get_validation_rmse) 
+
+validation_accuracy
+```
+
+### Prediction accuracy (test data)
+```{r prediction accuracy test, message=F, warning=F}
+test_predictions <- lapply(c(#"dgp1", "dgp1_60",
+                              #"dgp2", "dgp2_60",
+                              "d_rv_20", "d_rv_60"), function(df){
+  
+  test_data = test_dfs[[df]]                                # extract the relevant test data
+  
+  test_features = test_data %>%
+    dplyr::select(-y) %>%
+    as.matrix(.)
+
+  # 3 types of predictions
+  ## NLOPTR
+  #nloptr_theta = (nloptr_all_results[[df]]$theta_est)
+  #nloptr_pred = y_pred(nloptr_theta,
+  #                     test_features, N)
+  
+  ## machine learning
+  ### individudal models
+  ml_pred = sapply(ml_all_results[[df]], function(model){
+    
+    predict(model, test_data)
+  
+  })
+  
+  ### stacking models
+  stacking_pred = predict(two_layer_stacked[[df]]$model,
+                           ml_pred)
+  
+  results = data.frame(y = test_data$y,
+                       #nloptr = nloptr_pred,
+                       ml_pred,
+                       stacking = stacking_pred)
+  
+  return(results)
+  
+})
+
+names(test_predictions) <- c("d_rv_20", "d_rv_60")
+#names(test_predictions) <- c("dgp1", "dgp1_60", "dgp2", "dgp2_60", "d_rv", "d_rv_60")
+
+test_accuracy <- sapply(test_predictions, get_test_rmse)
+test_accuracy
+```
+
+# Appendix
+
+## Cross-check for gradient specification
+We can test whether the gradient function is correctly specified using a numercial evaluation.
+```{r gradient sanity, message=F, warning=F}
+my_gradient <- gradient(theta, outcome = data_cor_specification$y,
+                        features = data_cor_specification$X, no_of_lags = N); my_gradient
+
+system_calc_gradient <- jacobian(rss, theta,
+                                 outcome = data_cor_specification$y,
+                                 features = data_cor_specification$X, no_of_lags = N); system_calc_gradient
+```
+
+## Cross-check RMSE for validation predictions
+```{r rmse validation sanity, message=F, warning=F}
+validation_accuracy
+
+system_validation_accuracy <- lapply(c(#"dgp1", "dgp1_60",
+                              #"dgp2", "dgp2_60",
+                              "d_rv_20", "d_rv_60"), function(df){
+  
+  summary(resamples(ml_all_results[[df]]))
+  
+})
+
+system_validation_accuracy
+```
+
+## Tuning parameters
+
+### Generic plots
+```{r tuning generic plot, message=F, warning=F}
+# generate all plots
+ml_genric_charts <- lapply(names(ml_all_results), function(df){
+  
+  models = ml_all_results[[df]]
+  
+  charts = lapply(names(models), function(model){
+    
+    plot = ggplot(models[[model]]) +
+      labs(title = paste0("Model = ", model, ", Data = ", df)) +
+      theme_econ5170()
+    
+    return(plot)
+  })
+  
+  names(charts) = names(models)
+  
+  return(charts)
+
+})    
+
+names(ml_genric_charts) <- names(ml_all_results)
+
+# arrange each set in a grid
+ml_genric_charts_grid <- lapply(names(ml_all_results), function(df) {
+  
+  grid = do.call(grid.arrange, c(ml_genric_charts[[df]], ncol = 3))
+  
+  ggsave(paste0("tuning_generic_", df, ".pdf"),
+         grid,
+         width = 297, 
+         height = 210, 
+         units = "mm")
+  
+  return(grid)
+  
+})
+```
+
+### LASSO specific
+```{r tuning lasso specific, message=F, warning=F}
+# mimic the ggplot baseline colour hue
+gg_color_hue <- function(n) {
+  hues = seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 65, c = 100)[1:n]
+}
+
+lasso_specific_charts <- lapply(names(ml_all_results), function(df){
+  
+  lasso_model = ml_all_results[[df]]$glmnet             # locate lasso model
+  lambda = log(lasso_model$bestTune$lambda)             # find the best lambda
+  
+  plot = as.grob(function() {
+    
+    plot(lasso_model$finalModel,
+         xvar = "lambda", label = T,
+         #main = paste0("Model = glmnet, Data = ", df),
+         col = gg_color_hue(20))                        # use baseline ggplot colour
+    
+    legend("topright",
+           legend = paste0("Model = glmnet, Data = ", df))
+    
+    abline(v = lambda)                                  # mark when the best lambda value is
+
+  })
+  
+})
+
+lasso_specific_charts_grid <- do.call(grid.arrange, c(lasso_specific_charts, nrow = 3))
+
+ggsave("lasso_specific_charts_grid.pdf",
+       lasso_specific_charts_grid,
+       width = 210,
+       height = 297,
+       units = "mm")
+```
+
+### GBM specific
+```{r tuning gbm specific, message=F, warning=F}
+gbm_specific_charts <- lapply(names(ml_all_results), function(df){
+  
+  gbm_model = ml_all_results[[df]]$gbm
+  
+  plot(gbm_model, metric = "RMSE", plotType = "level",      # as.grob() not required for lattice plot
+           scales = list(x = list(rot = 90)),
+       main = paste0("Model = gbm, Data = ", df))
+
+})
+
+gbm_specific_charts_grid <- do.call(grid.arrange, c(gbm_specific_charts, nrow = 3))
+
+ggsave("gbm_specific_charts_grid.pdf",
+       gbm_specific_charts_grid,
+       width = 210,
+       height = 297,
+       units = "mm")
+```
+
+## HAR
+```{r HAR, message=F, warning=F}
+make_har_format <- function(df) {
+
+  mod = df %>%
+    as.data.frame(.) %>%
+    mutate(d = X.X.1.m) %>%
+    rowwise() %>%
+    mutate(w = mean(c(X.X.1.m:X.X.5.m)),      # weekly
+           m = mean(c(X.X.1.m:X.X.20.m))) %>% # monthly
+    ungroup()
+  
+  trim = mod[colnames(mod) %in% c("y", "d", "w", "m")]
+  
+  return(trim)
+  
+}
+
+do_har <- function(training, test) {
+  
+  # calculate weekly and monthly means
+  train_har = make_har_format(training)
+  test_har = make_har_format(test)
+  
+  # fit a har model
+  plain_ols = lm(y ~ . , data = train_har)
+  
+  # evaluate its accuracy
+  prediction = predict(plain_ols, test_har)
+  accuracy = RMSE(test_har$y, prediction)
+  
+  results = list(model = plain_ols,
+                 accuracy = accuracy)
+  
+  return(results)
+  
+}
+
+# baseline
+har <- do_har(d_rv_20_train, d_rv_20_test)
+
+# new
+har2 <- do_har(d_rv_60_train, d_rv_60_test)
+```
+
+## Horse race
+```{r horse race, message=F, warning=F}
+# tidy up validation accuracy by putting it in a proper dataframe
+validation_accuracy_tidy <- validation_accuracy %>%
+  as.data.frame(.) %>%
+  add_rownames(., var = "model") %>%
+  unnest(.) %>%
+  mutate(data = "Validation")
+
+# tidy up test accuracy by putting it in a proper dataframe
+test_accuracy_tidy <- test_accuracy %>%
+  as.data.frame(.) %>%
+  add_rownames(., var = "model") %>%
+  unnest(.) %>%
+  mutate(data = "Test")
+
+# bind these 2 togeher
+accuracy_df <- rbind(validation_accuracy_tidy, test_accuracy_tidy) %>%
+  melt(id = c("model", "data"))
+
+model_horse_race <- accuracy_df %>%
+  ggplot(aes(x = model, y = value)) +
+  geom_point(aes(shape = data, colour = data), size = 5) +
+  facet_wrap(~variable) +
+  coord_flip() +
+  labs(x = "Models",
+       y = "RMSE",
+       title = "Horse Race (RMSE)") +
+  scale_color_discrete(name = "RMSE Type") +
+  scale_shape_discrete(name = "RMSE Type") +
+  theme_econ5170() +
+  theme(legend.position = "bottom"); model_horse_race
+
+ggsave("model_horse_race.pdf",
+       model_horse_race,
+       width = 297, 
+       height = 210, 
+       units = "mm")
+```
+
+## Run time of machine learning models
+```{r machine learning run time, message=F, warning=F}
+ml_run_time <- lapply(names(ml_all_results), function(model_list) {
+  
+  time_df <- lapply(ml_all_results[[model_list]],
+                    function(model) {model$times$everything[3]}) %>%
+    bind_cols() %>%
+    cbind.data.frame(data = model_list, .)
+  
+}) %>% bind_rows() %>%
+  melt(id = "data")
+
+ml_run_time_chart <- ml_run_time %>%
+  ggplot(aes(x = variable, y = value)) +
+  geom_col(aes(fill = variable), show.legend = FALSE) +
+  facet_wrap(~ data) +
+  labs(x = "Models",
+       y = "Time (seconds)",
+       title = "Machine Learning Run Time",
+       subtitle = "Config: Ubuntu Docker. 32 vCPUs + 64GB Memory + 400GB Disk") +
+  scale_fill_discrete(name = "Model") +
+  theme_econ5170()
+  
+ml_run_time_chart
+
+ggsave("ml_run_time_chart.pdf",
+       ml_run_time_chart,
+       width = 297, 
+       height = 210, 
+       units = "mm")
+```
+
+# Save everything
+```{r save everything, message=F, warning=F}
+#save.image("econ5170_submission.RData")
+```
+
